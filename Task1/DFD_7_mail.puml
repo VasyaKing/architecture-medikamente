@@ -1,0 +1,29 @@
+@startuml
+title DFD-7: Передача данных через почту (Exchange)
+
+actor "Administrator" as A
+actor "Doctor" as D
+actor "Bookkeeper" as B
+actor "Warehouse keeper" as W
+actor "Laboratory staff" as L
+
+rectangle "Exchange Mail Server\n(внутренняя почта)" as Mail
+
+folder "Pacients/\nпапки пациентов" as PacientsRoot
+folder "Laboratory Registry\nреестры анализов" as LabRegFolder
+folder "Accounting docs\n(счета, акты, отчёты)" as AccDocs
+folder "Stock docs\n(накладные, заявки)" as StockDocs
+
+A --> Mail : отправляет/получает письма\nсо сканами документов пациента\n(договоры, согласия и др.)
+Mail --> PacientsRoot : вложения сохраняются\nв папки пациентов (вручную)
+
+L --> Mail : отправляет RegistryByDate.xlsx\nи результаты анализов\nво вложениях
+Mail --> LabRegFolder : вложения сохраняются\nв папку лабораторных реестров (вручную)
+
+B --> Mail : отправляет/получает счета,\nакты, отчёты
+Mail --> AccDocs : сохранение файлов\nв бухгалтерские папки
+
+W --> Mail : получает накладные,\nзаявки поставщикам
+Mail --> StockDocs : сохранение файлов\nв папки склада
+
+@enduml

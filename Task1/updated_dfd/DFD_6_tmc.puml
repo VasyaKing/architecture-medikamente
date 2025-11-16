@@ -1,0 +1,23 @@
+@startuml
+title DFD-6 (secured): Учёт ТМЦ и обмен между системами 1С
+
+actor "Warehouse keeper" as W
+actor "Bookkeeper" as B
+
+rectangle "1C Торговля и склад\n(серверный режим, БД)" as Trade1C
+rectangle "1C Бухгалтерия\n(серверный режим, БД)" as Acc1C
+
+W --> Trade1C : вводит движения ТМЦ:\nнакладные, списания, перемещения\n[tag: inventory.tmc]\n[ctrl: RBAC (роль Склад), audit]
+
+Trade1C --> Acc1C : обмен данными по ТМЦ:\nстоимость, количество, счета учёта\n[tag: inventory.tmc]\n[ctrl: TLS/внутренний защищённый канал, encrypt-at-rest]
+
+B --> Acc1C : использует данные ТМЦ\nдля проводок и отчётности\n[tag: inventory.tmc]\n[ctrl: RBAC (роль Бухгалтер), audit]
+
+legend
+  tag: inventory.tmc   - данные о товарно-материальных ценностях
+  ctrl: encrypt-at-rest - шифрование БД обеих 1С
+  ctrl: RBAC           - разделение ролей (склад/бухгалтерия)
+  ctrl: audit          - аудит операций в 1С
+endlegend
+
+@enduml

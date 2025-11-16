@@ -1,0 +1,194 @@
+@startuml
+title C4 Container: Целевая архитектура "Медикаменте" c Privacy by Design
+
+'----------------------
+' ПОЛЬЗОВАТЕЛИ
+'----------------------
+actor "Пациент" as Patient
+actor "Врач" as Doctor
+actor "Администратор ресепшена" as Reception
+actor "Кассир" as Cassier
+actor "Бухгалтер" as Bookkeeper
+actor "Сотрудник склада" as Warehouse
+actor "Сотрудник лаборатории" as LabStaff
+actor "BI/ML аналитик" as BIAnalyst
+
+'----------------------
+' ИНТЕГРАЦИИ
+'----------------------
+rectangle "Внешняя лаборатория\n(Laboratory System)" as ExtLab
+rectangle "1C Бухгалтерия\n(Accounting)" as Ext1CAcc
+rectangle "1C Торговля и склад\n(Trade & Warehouse)" as Ext1CTrade
+rectangle "ККМ\n(Фискальные регистраторы)" as ExtKKM
+rectangle "Почтовый сервер\n(Exchange / Email)" as ExtMail
+
+'----------------------
+' СИСТЕМА МЕДИКАМЕНТЕ
+'----------------------
+rectangle "Система \"Медикаменте\"" as Medikamente {
+
+  ' ===== Core Business Platform =====
+  rectangle "Core Business Platform" as Core {
+
+    rectangle "Портал пациента\nWeb / Mobile" as PatientPortal
+    rectangle "Портал сотрудников\n(ресепшен, врачи, кассиры,\nбухгалтерия, склад)" as StaffPortal
+
+    rectangle "API Gateway\n(единая точка входа,\nTLS, rate limit, WAF)" as APIGW
+
+    rectangle "Сервис записи и журналов\n(Scheduling & Journals Service)" as SchedSvc
+    rectangle "Сервис медкарт\n(Medical Records Service)" as MedRecSvc
+    rectangle "Сервис интеграции с лабораторией\n(Lab Integration Service)" as LabIntSvc
+    rectangle "Платёжный сервис\n(Billing / Payment Service)" as BillSvc
+    rectangle "Сервис интеграции с 1С\n(1C Integration Service)" as OneCIntSvc
+
+    rectangle "Операционная БД\n(Postgres: пациенты,\nзаписи, медкарты, платежи)" as CoreDB
+    rectangle "Хранилище файлов\n(Object Storage: медкарты,\nрезультаты анализов,\nсканы документов)" as ObjStore
+  }
+
+  ' ===== Privacy & Security Platform =====
+  package "Privacy & Security Platform" as PnS {
+
+    rectangle "IAM / Auth Server\n(Keycloak / OIDC)\n- аутентификация\n- роли (RBAC)\n- токены" as IAM
+
+    rectangle "Policy Engine / PDP\n(ABAC, политики по тегам)" as PDP
+
+    rectangle "Data Tagging Service\n(классификация данных,\nуправление тегами)" as TagSvc
+
+    rectangle "Crypto & Key Management\n(шифрование полей и хранилищ,\nуправление ключами)" as CryptoSvc
+
+    rectangle "Audit & Logging Service\n(аудит доступа к медданным,\nмониторинг аномалий)" as AuditSvc
+
+    rectangle "Consent & Privacy\nPreferences Service\n(согласия пациентов,\nограничения аналитики)" as ConsentSvc
+  }
+
+  ' ===== Analytics & Data Platform =====
+  package "Analytics & Data Platform" as ADP {
+
+    rectangle "Raw Data Store\n(ограниченный доступ,\nисточник только для расследований)" as RawStore
+
+    rectangle "De-Identified Data Store\n(Analytics Zone / DWH)\nобезличенные и агрегированные данные" as DeidStore
+
+    rectangle "ETL / De-identification Service\n(выгрузка из Core,\nобезличивание по тегам,\nзагрузка в DWH)" as ETLSvc
+
+    rectangle "BI / Reporting\n(отчётность, дашборды)" as BISvc
+
+    rectangle "ML/AI Sandbox\n(песочница для моделей,\nработает только с де-ID данными)" as MLSvc
+  }
+}
+
+'----------------------
+' СВЯЗИ: ПОЛЬЗОВАТЕЛИ ↔ CORE
+'----------------------
+Patient --> PatientPortal : запись на приём,\nпросмотр своих анализов и заключений
+PatientPortal --> APIGW
+APIGW --> IAM : аутентификация пациента\n(OIDC/OAuth2)
+
+Reception --> StaffPortal : работа с очередями и записями пациентов
+Doctor --> StaffPortal : работа с журналом\nи медкартами
+Cassier --> StaffPortal : проведение оплаты
+Bookkeeper --> StaffPortal : отчётность,\nфинансовые операции
+Warehouse --> StaffPortal : учёт ТМЦ
+LabStaff --> ExtLab : работа во внешней\nлабораторной системе
+
+StaffPortal --> APIGW
+APIGW --> IAM : аутентификация сотрудников\n(роль, отдел)
+
+'----------------------
+' СВЯЗИ: CORE ↔ PRIVACY & SECURITY
+'----------------------
+
+' Все запросы к данным идут с проверкой политик
+APIGW --> PDP : запрос на авторизацию\n(кто/что/к каким тегам хочет доступ)
+PDP --> APIGW : решение allow/deny\n+ маскирование полей
+
+' Core сервисы используют IAM для информации о пользователе
+APIGW --> IAM : валидация токенов,\nполучение ролей/атрибутов
+
+' Core сервисы используют тегирование и шифрование
+MedRecSvc --> TagSvc : запрос/применение тегов\n(patient.pii, patient.medical,...)
+SchedSvc --> TagSvc : тегирование ПДн в записях
+BillSvc --> TagSvc : тегирование финансовых данных
+LabIntSvc --> TagSvc : тегирование медданных анализов
+
+MedRecSvc --> CryptoSvc : шифрование/расшифровка\nчувствительных полей и файлов
+BillSvc --> CryptoSvc : шифрование финансовых данных
+CoreDB --> CryptoSvc : TDE / ключи шифрования
+ObjStore --> CryptoSvc : SSE / ключи шифрования
+
+' Аудит
+MedRecSvc --> AuditSvc : события "кто читал/менял медкарту"
+SchedSvc --> AuditSvc : события "кто менял запись"
+BillSvc --> AuditSvc : события "кто проводил платежи"
+ETLSvc --> AuditSvc : события "что выгружено в аналитику"
+
+' Согласия
+PatientPortal --> ConsentSvc : просмотр/изменение\nсоглашений на обработку
+ETLSvc --> ConsentSvc : проверка "можно ли\nиспользовать данные пациента\nв аналитике?"
+
+'----------------------
+' СВЯЗИ ВНУТРИ CORE PLATFORM
+'----------------------
+
+APIGW --> SchedSvc : API записи к врачу,\nпросмотр расписания
+APIGW --> MedRecSvc : API доступа к медкартам\n(только по правам/политикам)
+APIGW --> BillSvc : операции оплаты и статуса оплат
+APIGW --> LabIntSvc : заказ анализов,\nполучение результатов
+APIGW --> OneCIntSvc : операции интеграции с 1С
+
+SchedSvc --> CoreDB : хранение записей к врачу
+MedRecSvc --> CoreDB : хранение структурированной\nчасти медкарты
+MedRecSvc --> ObjStore : хранение файлов\n(PDF, JPG, сканы)
+
+BillSvc --> CoreDB : связь платежей с пациентами/услугами
+
+'----------------------
+' ИНТЕГРАЦИИ С ВНЕШНИМИ СИСТЕМАМИ
+'----------------------
+
+' Лаборатория
+LabIntSvc --> ExtLab : заказы/результаты анализов\n(минимизация ПДн, ID вместо ФИО,\nTLS/mTLS, OAuth2)
+ExtLab --> LabIntSvc
+
+' Платежи и 1С
+BillSvc --> ExtKKM : пробитие чеков
+ExtKKM --> BillSvc : статусы/идентификаторы чеков
+
+BillSvc --> OneCIntSvc : данные о платежах
+OneCIntSvc --> Ext1CAcc : проводки, платежи
+OneCIntSvc --> Ext1CTrade : данные по ТМЦ (опционально)
+
+' Еmail (ограниченное использование)
+MedRecSvc --> ExtMail : уведомления без ПДн/\nили с минимальным набором данных
+ExtMail --> StaffPortal : служебные уведомления
+
+'----------------------
+' АНАЛИТИЧЕСКАЯ ПЛАТФОРМА
+'----------------------
+
+' Выгрузка данных из Core → Analytics по тегам
+CoreDB --> ETLSvc : выгрузка данных\nс тегами (структура, не сырые файлы)
+ObjStore --> ETLSvc : доступ к данным\nпо необходимости и с учётом тегов
+
+ETLSvc --> RawStore : сырые выгрузки\n(ограниченный доступ, зашифровано)
+ETLSvc --> DeidStore : де-идентифицированные\nи агрегированные данные\n(удалены patient.pii_strong,\nпсевдонимизация ID, обобщение дат)
+
+DeidStore --> BISvc : отчёты и дашборды\n(без ПДн)
+DeidStore --> MLSvc : датасеты для моделей\n(без прямых идентификаторов)
+
+BIAnalyst --> BISvc : аналитика, отчёты
+BIAnalyst --> MLSvc : обучение/запуск моделей\nв песочнице
+
+'----------------------
+' PRIVACY BY DESIGN
+'----------------------
+note bottom of Medikamente
+  Privacy by Design реализуется через:
+  - IAM + PDP: доступ к данным только по ролям/политикам (RBAC/ABAC).
+  - Data Tagging: все данные классифицированы (patient.pii, patient.medical, finance.payment...).
+  - Crypto: шифрование БД и файлов, контроль ключей.
+  - Audit: полный аудит доступа к медданным и выгрузкам в аналитику.
+  - Consent: управление согласиями пациентов на обработку и аналитику.
+  - Analytics: все BI/ML работают только с де-идентифицированными данными (De-Identified Data Store).
+end note
+
+@enduml

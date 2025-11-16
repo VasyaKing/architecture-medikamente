@@ -1,0 +1,29 @@
+@startuml
+title DFD-5 (secured): Оплата услуг и учёт платежей
+
+actor Patient as P
+actor "Cassier" as C
+actor "Bookkeeper" as B
+
+rectangle "ККМ\n(контрольно-кассовая машина)" as KKM
+rectangle "Платёжный шлюз / биллинг\n(между ККМ и 1С)" as PayGate
+rectangle "1C Бухгалтерия\n(серверный режим, защищённая БД)" as Acc1C
+
+P --> C : передаёт деньги/карту\n(tag: finance.payment + patient.pii частично)
+C --> KKM : вводит сумму, тип услуги\nиногда ID пациента\n[tag: finance.payment, patient.pii]\n[ctrl: no-logs(ПДн), локальная авторизация кассира]
+
+KKM --> PayGate : фискальные данные, сумма, время,\nID операции, опционально ID пациента\n[tag: finance.payment]\n[ctrl: TLS, подписанные сообщения]
+PayGate --> Acc1C : проводки, платежи\n(tag: finance.payment)\n[ctrl: TLS, encrypt-at-rest, RBAC]
+
+B --> Acc1C : работает с финансовыми данными\n(tag: finance.payment)\n[ctrl: RBAC (роль Бухгалтер), audit]
+
+legend
+  tag: finance.payment - данные о платежах
+  ctrl: TLS            - шифрование канала
+  ctrl: encrypt-at-rest - шифрование БД 1С/биллинга
+  ctrl: RBAC           - ограничение доступа (кассир/бухгалтер)
+  ctrl: audit          - аудит операций в 1С
+  ctrl: no-logs(ПДн)   - в логах не хранить ПДн пациента
+endlegend
+
+@enduml

@@ -1,0 +1,42 @@
+@startuml
+title DFD-7 (secured): Передача данных через почту (Exchange + DLP)
+
+actor "Administrator" as A
+actor "Doctor" as D
+actor "Bookkeeper" as B
+actor "Warehouse keeper" as W
+actor "Laboratory staff" as L
+
+rectangle "Exchange Mail Server\n(внутренняя почта + DLP)" as Mail
+
+folder "Pacients/\nпапки пациентов\n(защищённое хранилище)" as PacientsRoot
+folder "Laboratory Registry\n(защищённое хранилище)" as LabRegFolder
+folder "Accounting docs\n(бухгалтерские документы)" as AccDocs
+folder "Stock docs\n(документы склада)" as StockDocs
+
+A --> Mail : письма со сканами договоров, согласий\n[tag: patient.pii_strong]\n[ctrl: TLS, DLP (запрет наружу), no-forward, AV-scan]
+Mail --> PacientsRoot : сохранение вложений в систему\n[tag: patient.pii_strong]\n[ctrl: encrypt-at-rest, RBAC]
+
+L --> Mail : реестры анализов и результаты\nво вложениях\n[tag: patient.medical]\n[ctrl: TLS, DLP, AV-scan]
+Mail --> LabRegFolder : вложения сохраняются\nв отдельное защищённое хранилище\n[tag: patient.medical]\n[ctrl: encrypt-at-rest, RBAC]
+
+B --> Mail : счета, акты, отчёты\n[tag: finance.payment]\n[ctrl: TLS, DLP]
+Mail --> AccDocs : сохранение файлов\nв бухгалтерские папки\n[tag: finance.payment]\n[ctrl: encrypt-at-rest, RBAC]
+
+W --> Mail : накладные, заявки\n[tag: inventory.tmc]\n[ctrl: TLS, DLP]
+Mail --> StockDocs : сохранение файлов\nв складские папки\n[tag: inventory.tmc]\n[ctrl: encrypt-at-rest, RBAC]
+
+legend
+  tag: patient.pii_strong - сканы договоров, паспортов
+  tag: patient.medical    - результаты анализов
+  tag: finance.payment    - счета, акты, отчёты
+  tag: inventory.tmc      - документы по ТМЦ
+
+  ctrl: TLS       - шифрование канала
+  ctrl: DLP       - система предотвращения утечек (запрет наружу, контроль вложений)
+  ctrl: AV-scan   - антивирусная проверка вложений
+  ctrl: encrypt-at-rest - шифрование файлового/объектного хранилища
+  ctrl: RBAC      - ограничение доступа по ролям
+endlegend
+
+@enduml
