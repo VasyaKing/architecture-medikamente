@@ -1,0 +1,32 @@
+@startuml
+title DFD-4 (secured): Лабораторные анализы и реестры
+
+actor "Doctor" as D
+actor "Laboratory staff" as L
+
+rectangle "Система лаборатории (Lab API)\nзащищённая интеграция" as LabSys
+folder "Laboratory Registry\n(защищённое хранилище реестров)" as LabRegFolder
+rectangle "RegistryByDate\n(реестр анализов за день)" as RegistryByDate
+rectangle "Lab results files\n(PDF/JPG с результатами анализов)" as LabResults
+
+D --> LabSys : создаёт заказы/направления\nID пациента, тип анализа\n[tag: patient.pii, patient.medical]\n[ctrl: TLS/mTLS, OAuth2/OIDC, no-logs(body)]
+L --> RegistryByDate : формирует реестр за день:\nID пациента, анализ, результат\n[tag: patient.medical]\n[ctrl: encrypt-at-rest]
+L --> LabRegFolder : сохраняет RegistryByDate\nи результаты анализов\n[tag: patient.medical]\n[ctrl: encrypt-at-rest, RBAC]
+
+LabRegFolder --> RegistryByDate : хранит реестры\n[tag: patient.medical]\n[ctrl: encrypt-at-rest, legal-retention]
+LabRegFolder --> LabResults : хранит файлы результатов\n[tag: patient.medical]\n[ctrl: encrypt-at-rest, AV-scan, no-logs]
+
+D --> LabRegFolder : читает результаты\nпо конкретному пациенту\n[tag: patient.medical]\n[ctrl: RBAC (только свои пациенты), audit]
+
+legend
+  Канал Doctor ↔ LabSys:
+    ctrl: TLS/mTLS     - шифрованный API-канал
+    ctrl: OAuth2/OIDC  - аутентификация/авторизация сервисов
+    ctrl: no-logs(body) - тела запросов с медданными не логируются
+
+  Хранилища (LabRegFolder, RegistryByDate, LabResults):
+    tag: patient.medical
+    ctrl: encrypt-at-rest, RBAC, legal-retention, AV-scan
+endlegend
+
+@enduml

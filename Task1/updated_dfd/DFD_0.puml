@@ -1,0 +1,101 @@
+@startuml
+title DFD-0 (secured): Общие потоки данных в компании "Медикаменте"
+
+' ---- Внешние сущности (роли) ----
+actor Patient            as P
+actor "Administrator"    as A
+actor "Doctor"           as D
+actor "Cassier"          as C
+actor "Bookkeeper"       as B
+actor "Warehouse keeper" as W
+actor "Laboratory staff" as L
+
+' ---- Основные системы / хранилища ----
+node "File system / FileServer\n(общий диск / объектное хранилище)" as FS
+rectangle "CRM / Регистрация пациентов\n(БД + сервис)" as CRM
+rectangle "1C Бухгалтерия\n(серверный режим)" as Acc1C
+rectangle "1C Торговля и склад\n(серверный режим)" as Trade1C
+rectangle "ККМ\n(контрольно-кассовая машина)" as KKM
+rectangle "Платёжный шлюз\n(между ККМ и 1С)" as PayGate
+rectangle "Exchange Mail Server\n(почта + DLP)" as Mail
+rectangle "Система лаборатории\n(Lab API)" as LabSys
+rectangle "Data Lake / DWH\n(для BI/ML, только обезличенные данные)" as DWH
+
+' Логические хранилища внутри File system
+folder "Journals\n(журналы записей к врачам)" as Journals
+folder "Pacients/*\n(папки пациентов с медкартами)" as Pacients
+folder "Laboratory Registry\n(реестры и результаты анализов)" as LabReg
+
+FS -- Journals
+FS -- Pacients
+FS -- LabReg
+
+' ---- Регистрация и медкарта пациента ----
+P --> A : ПДн, контакты, жалобы\n[tag: patient.pii, patient.pii_strong]\n[ctrl: TLS(веб), no-logs(полный текст)]
+A --> CRM : регистрация пациента\n(ФИО, ДР, контакты, паспорт)\n[tag: patient.pii, patient.pii_strong]\n[ctrl: encrypt-at-rest, RBAC, mask-in-ui, audit]
+
+CRM --> Pacients : создание/связка папки пациента\nи файлов медкарты\n[tag: patient.pii_strong, patient.medical]\n[ctrl: encrypt-at-rest, RBAC, AV-scan, legal-retention]
+
+D --> Pacients : работа с медкартой пациента\n(заключения, назначения)\n[tag: patient.medical]\n[ctrl: RBAC(Doctor), audit, encrypt-at-rest, pii-remove-for-bi]
+
+' ---- Журналы записи к врачу ----
+A --> Journals : ведёт журналы по врачам\n(ФИО, дата, время, услуга)\n[tag: patient.pii]\n[ctrl: encrypt-at-rest, RBAC, audit, mask-in-ui]
+
+D --> Journals : просматривает свой журнал\n[tag: patient.pii]\n[ctrl: RBAC(по врачу), audit]
+
+' ---- Лабораторные анализы ----
+D --> LabSys : заказы/направления на анализы\n(ID пациента, тип анализа)\n[tag: patient.pii, patient.medical]\n[ctrl: TLS/mTLS, OAuth2, no-logs(body)]
+
+LabSys --> LabReg : реестры и результаты анализов\n(RegistryByDate, PDF/JPG)\n[tag: patient.medical]\n[ctrl: encrypt-at-rest, AV-scan, RBAC, legal-retention]
+
+D --> LabReg : просмотр результатов\nпо пациенту\n[tag: patient.medical]\n[ctrl: RBAC(свои пациенты), audit]
+
+' ---- Платежи и бухгалтерия ----
+P --> C : оплата услуг\n(tag: finance.payment + patient.pii частично)
+C --> KKM : регистрация платежа\n[tag: finance.payment]\n[ctrl: локальная авторизация кассира, no-logs(ПДн)]
+
+KKM --> PayGate : фискальные данные, сумма, время\n[tag: finance.payment]\n[ctrl: TLS, подписанные сообщения]
+PayGate --> Acc1C : проводки, платежи\n[tag: finance.payment]\n[ctrl: TLS, encrypt-at-rest, RBAC, audit]
+
+B --> Acc1C : бухгалтерский учёт, отчёты\n[tag: finance.payment]\n[ctrl: RBAC(Бухгалтер), audit]
+
+' ---- Учёт ТМЦ ----
+W --> Trade1C : операции по ТМЦ\n(приход/расход/накладные)\n[tag: inventory.tmc]\n[ctrl: RBAC(Склад), audit]
+Trade1C --> Acc1C : обмен по ТМЦ\n(стоимость, счета)\n[tag: inventory.tmc]\n[ctrl: защищённый канал, encrypt-at-rest]
+
+' ---- Почта как канал (ограниченный) ----
+A --> Mail : письма со сканами договоров/согласий\n[tag: patient.pii_strong]\n[ctrl: TLS, DLP(контроль наружу), AV-scan, no-forward]
+L --> Mail : отправка реестров/результатов анализов\n[tag: patient.medical]\n[ctrl: TLS, DLP, AV-scan]
+
+Mail --> Pacients : только импорт во внутреннее защищённое хранилище\n(tag: patient.pii_strong, patient.medical)\n[ctrl: encrypt-at-rest, RBAC]
+
+' ---- Data Lake / BI / ML ----
+CRM --> DWH : выгрузка данных пациентов\nбез ПДн\n[tag: analytics, patient.medical]\n[ctrl: pii-remove-for-bi, агрегирование, encrypt-at-rest]
+
+Acc1C --> DWH : финансовые данные\n(tag: finance.payment)\n[ctrl: обезличивание пациента, encrypt-at-rest]
+
+LabReg --> DWH : обезличенные результаты анализов\n[tag: analytics, patient.medical]\n[ctrl: pii-remove-for-bi, encrypt-at-rest]
+
+' ---- Легенда ----
+legend
+  tag: patient.pii        - базовые ПДн пациента (ФИО, контакты)
+  tag: patient.pii_strong - особо чувствительные ПДн (паспорт, адрес)
+  tag: patient.medical    - медицинские данные (диагнозы, анализы)
+  tag: finance.payment    - данные о платежах
+  tag: inventory.tmc      - данные о ТМЦ
+  tag: analytics          - данные, подготовленные для BI/ML
+
+  ctrl: encrypt-at-rest    - шифрование в хранилище
+  ctrl: TLS / mTLS         - шифрование канала, взаимная аутентификация
+  ctrl: OAuth2             - авторизация сервисов/пользователей
+  ctrl: RBAC               - доступ по ролям (Doctor, Reception, Бухгалтер и т.п.)
+  ctrl: audit              - аудит доступа и изменений
+  ctrl: mask-in-ui         - маскирование (неполное отображение) в интерфейсе
+  ctrl: no-logs(...)       - запрет логировать содержимое поля/тела запроса
+  ctrl: AV-scan            - антивирусная проверка файлов
+  ctrl: DLP                - контроль утечек (почта, файлы, внешние отправки)
+  ctrl: legal-retention    - хранение по срокам закона
+  ctrl: pii-remove-for-bi  - обезличивание ПДн при загрузке в DWH/ML
+endlegend
+
+@enduml

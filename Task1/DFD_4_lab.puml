@@ -1,0 +1,19 @@
+@startuml
+title DFD-4: Лабораторные анализы и реестры
+
+actor "Doctor" as D
+actor "Laboratory staff" as L
+
+rectangle "Система лаборатории\n(внешняя)" as LabSys
+folder "Laboratory Registry\n(папка на файловой системе)" as LabRegFolder
+rectangle "RegistryByDate.xlsx\n(реестр анализов за день)" as RegistryByDate
+rectangle "Lab results files\n(PDF/JPG с результатами)" as LabResults
+
+D --> LabSys : передаёт направления\nи данные пациентов\n(бумага/файлы/email)
+L --> RegistryByDate : формирует реестр за день\nФИО, анализ, статус, результат
+L --> LabRegFolder : сохраняет RegistryByDate.xlsx\nи файлы результатов
+LabRegFolder --> RegistryByDate : хранит реестры\nпо датам
+LabRegFolder --> LabResults : хранит отдельные файлы\nрезультатов анализов
+D --> LabRegFolder : открывает нужный реестр\nили файл результата\nдля конкретного пациента
+
+@enduml

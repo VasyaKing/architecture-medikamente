@@ -1,0 +1,18 @@
+@startuml
+title DFD-1: Регистрация пациента и создание карточки
+
+actor Patient as P
+actor "Administrator" as A
+
+rectangle "Patients.xlsx\n(список пациентов)" as Patients
+folder "Pacients/\n(корневой каталог пациентов)" as PacientsRoot
+folder "PacientN-FIO-BD\n(папка конкретного пациента)" as PacientFolder
+rectangle "Файлы пациента\n(Data files: паспорт, договор,\nсогласия, анкеты и т.д.)" as DataFiles
+
+P --> A : сообщает ФИО, ДР,\nконтакты, паспорт,\nполис, адрес
+A --> Patients : добавляет/обновляет\nстроку с данными пациента
+A --> PacientsRoot : создаёт папку пациента\nPacientN-FIO-BD
+A --> PacientFolder : закидывает файлы пациента
+PacientFolder --> DataFiles : хранит\nфайлы пациента
+
+@enduml

@@ -1,0 +1,29 @@
+@startuml
+title DFD-1 (secured): Регистрация пациента и создание карточки
+
+actor Patient as P
+actor "Administrator" as A
+
+rectangle "Регистрация пациентов\n(БД / сервис регистрации)" as Patients
+folder "Pacients/\n(корневой каталог пациентов)" as PacientsRoot
+folder "PacientN-FIO-BD\n(папка конкретного пациента\nв защищённом хранилище)" as PacientFolder
+rectangle "Файлы пациента\n(сканы паспорта, договоры,\nанкеты и т.д.)" as DataFiles
+
+P --> A : сообщает ПДн устно/анкета\n[tag: patient.pii, patient.pii_strong]
+A --> Patients : создаёт/обновляет запись пациента\nФИО, ДР, контакты, документ\n[tag: patient.pii, patient.pii_strong]\n[ctrl: encrypt-at-rest, mask-in-ui, no-logs, RBAC]
+A --> PacientsRoot : создаёт папку пациента\nPacientN-FIO-BD\n[tag: patient.pii_strong]\n[ctrl: encrypt-at-rest, RBAC]
+A --> PacientFolder : загружает файлы пациента\nпаспорт, договор, согласия\n[tag: patient.pii_strong]\n[ctrl: encrypt-at-rest, no-logs, AV-scan]
+PacientFolder --> DataFiles : хранит файлы пациента\n[tag: patient.pii_strong]\n[ctrl: encrypt-at-rest, legal-retention]
+
+legend
+  tag: тег категории данных (pii, medical и т.д.)
+  ctrl: применяемая мера защиты:
+  ctrl: encrypt-at-rest  : шифрование в хранилище
+  ctrl: mask-in-ui       : маскировка в интерфейсе
+  ctrl: no-logs          : запрет записи содержимого в логи
+  ctrl: RBAC             : доступ по ролям (ресепшен/врач и т.п.)
+  ctrl: AV-scan          : антивирусная проверка файлов
+  ctrl: legal-retention  : хранение по требованиям законодательства
+endlegend
+
+@enduml

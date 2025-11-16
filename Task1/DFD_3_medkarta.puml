@@ -1,0 +1,16 @@
+@startuml
+title DFD-2: Запись на приём к врачу (журнал врача)
+
+actor Patient as P
+actor "Administrator" as A
+actor "Doctor" as D
+
+folder "Journals/\n(журналы по врачам)" as Journals
+rectangle "Journal-Doctor-FIO.xlsx\n(журнал конкретного врача)" as JDoctor
+
+P --> A : просьба записать\nна приём (по телефону/лично)
+A --> JDoctor : добавляет строку\nдата, время, ФИО, контакт,\nтип услуги, комментарий
+A --> Journals : создаёт/перемещает\nфайлы журналов при необходимости
+D --> JDoctor : просматривает свой журнал,\nможет редактировать записи\n(перенос, пометки)
+
+@enduml

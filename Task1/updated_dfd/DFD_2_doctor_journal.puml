@@ -1,0 +1,25 @@
+@startuml
+title DFD-2 (secured): Запись на приём (журнал врача)
+
+actor Patient as P
+actor "Administrator" as A
+actor "Doctor" as D
+
+folder "Journals/\n(журналы по врачам)" as Journals
+rectangle "Journal-Doctor-FIO\n(журнал конкретного врача\nв защищённой системе)" as JDoctor
+
+P --> A : запрос на запись\nФИО + контакты\n[tag: patient.pii]
+A --> JDoctor : создаёт/обновляет запись:\nдата, время, ФИО, контакт, услуга\n[tag: patient.pii]\n[ctrl: encrypt-at-rest, mask-in-ui, RBAC]
+A --> Journals : управление журналами\nсоздание/архивирование\n[tag: patient.pii]\n[ctrl: encrypt-at-rest, legal-retention]
+
+D --> JDoctor : читает и редактирует\nзаписи только своих пациентов\n[tag: patient.pii]\n[ctrl: RBAC (role=Doctor), audit]
+
+legend
+  tag: patient.pii     - ПДн пациента (ФИО, контакты)
+  ctrl: encrypt-at-rest - шифрование хранилища журналов
+  ctrl: mask-in-ui      - маскирование в интерфейсе (часть данных скрыта)
+  ctrl: RBAC            - доступ по ролям (врач видит только свои журналы)
+  ctrl: audit           - журналирование действий с журналом
+endlegend
+
+@enduml

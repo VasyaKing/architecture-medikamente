@@ -1,0 +1,25 @@
+@startuml
+title DFD-3 (secured): Медкарта пациента в файловой/объектной системе
+
+actor "Doctor" as D
+
+folder "Pacients/" as PacientsRoot
+folder "PacientN-FIO-BD\n(папка пациента в защищённом хранилище)" as PacientFolder
+rectangle "Меддокументы пациента\n(заключения, назначения,\nрезультаты анализов и др.)" as MedFiles
+
+D --> PacientsRoot : ищет нужного пациента\nпо ID/ФИО в системе\n[tag: patient.pii]\n[ctrl: RBAC, audit]
+D --> PacientFolder : открывает папку пациента\n[tag: patient.pii_strong]\n[ctrl: RBAC (только лечащий врач), encrypt-at-rest]
+D --> MedFiles : создаёт/изменяет документы:\nзаключения, назначения, выписки\n[tag: patient.medical]\n[ctrl: encrypt-at-rest, no-logs, pii-remove-for-bi, audit]
+PacientFolder --> MedFiles : хранит набор меддокументов\n[tag: patient.medical]\n[ctrl: encrypt-at-rest, legal-retention]
+
+legend
+  tag: patient.medical    - медицинские данные пациента
+  tag: patient.pii        - базовые ПДн
+  tag: patient.pii_strong - особо чувствительные ПДн
+  ctrl: RBAC              - доступ по ролям (врач vs другие)
+  ctrl: audit             - аудит доступа к медкарте
+  ctrl: pii-remove-for-bi - обезличивание при выгрузке в DWH/ML
+  ctrl: encrypt-at-rest   - шифрование хранилища меддокументов
+endlegend
+
+@enduml
